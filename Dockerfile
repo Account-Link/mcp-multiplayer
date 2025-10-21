@@ -7,8 +7,8 @@ RUN pip install -r requirements.txt
 
 RUN useradd -m -u 1000 botuser && \
     chown -R botuser:botuser /app && \
-    mkdir -p /tmp/bot_workspace && \
-    chown botuser:botuser /tmp/bot_workspace
+    mkdir -p /tmp/bot_workspace /app/data && \
+    chown botuser:botuser /tmp/bot_workspace /app/data
 
 USER botuser
 

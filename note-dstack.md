@@ -61,3 +61,10 @@ https://<app-id>-8100.dstack-prod5.phala.network
 - OAuth endpoints automatically return HTTPS URLs when `DOMAIN` is set to real domain
 - Compatible with Claude's OAuth 2.1 security requirements
 - Based on successful deployment pattern from ambient_mcp project
+
+## Persistence
+
+- Named volume `mcp-data:/app/data` for persistent storage across container restarts
+- Container runs as `botuser` (uid 1000) - `/app/data` directory must be owned by botuser
+- Dockerfile creates `/app/data` with correct ownership before switching to non-root user
+- OAuth tokens and channel state persist in volume

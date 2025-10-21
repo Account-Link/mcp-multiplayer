@@ -8,9 +8,11 @@
 
 services:
   mcp-multiplayer:
-    image: socrates1024/mcp-multiplayer@sha256:eb3b918a1f5ac185f3ec5e271874bc146c934fd5a12884db5324d7b99c97131a
+    image: socrates1024/mcp-multiplayer@sha256:6faf1f486b47025e36ba6dc305754a4cc325cc08b0ce680cbea06a0741efac1f
     ports:
       - "8100:8100"
+    volumes:
+      - mcp-data:/app/data
     environment:
       - PROXY_HOST=0.0.0.0
       - PROXY_PORT=8100
@@ -19,3 +21,6 @@ services:
       - USE_SSL=false
       # DOMAIN will be auto-detected from Host header for dstack deployments
     restart: unless-stopped
+
+volumes:
+  mcp-data:
