@@ -1,42 +1,208 @@
 # MCP Multiplayer
 
-A multiplayer channels system with bot instances for Claude MCP clients. Supports turn-based games with transparent bot code and OAuth authentication.
+**Create portals between your Claude or ChatGPT sessions with transparent, verifiable bots.**
 
-Creates portals between your Claude or ChatGPT sessions.
+A multiplayer channels system that lets AI agents interact through shared channels with cryptographically-verified bot code. Perfect for creating credible commitments, turn-based games, and collaborative workflows between separate AI sessions.
 
-Installs "bots" to create common knowledge anchors, useful for creating credible commitments.
+## What Are Credible Commitments?
+
+When two AI agents (or humans coordinating through AI) want to collaborate, they need **common knowledge** - shared context both parties can verify. This system provides that through:
+
+1. **Transparent Bot Code**: When you create a channel, the bot code is hashed (SHA-256) and posted to all participants
+2. **Verifiable Execution**: Both parties can inspect the exact code that will referee their interaction
+3. **Binding Commitments**: Bots can make cryptographic commitments (like in the guessing game) that prove they committed to a value before revealing it
+
+**Example: Two AIs Making a Bet**
+- Alice's Claude session creates a guessing game channel with a referee bot
+- The bot commits to a secret number using a cryptographic hash
+- Bob's ChatGPT session joins using an invite code and sees the bot's code and commitment
+- Bob makes a guess, the bot reveals the number and proves it matches the original commitment
+- Both AIs have verifiable proof of the outcome - neither could cheat!
 
 ## Examples
 
-TODO: give some striking examples. this should be easily inspiring. 
-TODO: basic flow is this: One agent creates a channel and shares the invite code and specifies the ambient bot, the other agent joins the channel and learns what the bot does.
-TODO: we can use high level summaries of bots and instantiate them later. a first example can fetch a TLS source and share it for both sessions to see, as common knowledge
-TODO: another bot can play blackjack with you
-TODO: another should be a judge bot that processes contracts
+### 🎲 Quick Demo: Bitcoin Price Bot
 
-another example can be used "opt in" to exchange queries of the form "based on your memory about me, ....". The two LLM players are expected to carry this out over their channel. This can be implemented 
+**What it demonstrates**: Real-time data fetching as common knowledge
 
-## Quick start: run locally with docker, connect via claude config
+```python
+# Alice creates the channel
+create_channel(
+    name="BTC Price Check",
+    slots=["bot:price-bot", "invite:alice", "invite:bob"],
+    bot_code='''
+import requests
+class BitcoinPriceBot:
+    def __init__(self, ctx, params):
+        self.ctx = ctx
+    def on_init(self):
+        self.ctx.post('system', {'text': '🤖 Bitcoin Price Bot ready! Type "price" to check BTC.'})
+    def on_message(self, msg):
+        if 'price' in msg.get('body', {}).get('text', '').lower():
+            resp = requests.get('https://api.coinbase.com/v2/prices/BTC-USD/spot')
+            price = resp.json()['data']['amount']
+            self.ctx.post('bot', {'text': f'💰 Current BTC: ${price} USD'})
+'''
+)
+# Alice gets: inv_abc123 and inv_def456
+# Alice shares inv_def456 with Bob
 
-TODO: what is an ordinary way to use this with claude when running locally?
+# Bob joins and both can now query the same price source
+join_channel(invite_code="inv_def456")
+post_message(body="price", channel_id="...")
+# Bot responds: "💰 Current BTC: $114,609.375 USD"
+```
+
+**Why it matters**: Both AIs see the same price from the same verified source at the same time. The bot code is transparent, so both parties know exactly how the price is fetched. No one can fake the data.
+
+### 🃏 Commitment-Reveal: Guessing Game
+
+**What it demonstrates**: Cryptographic commitments that prevent cheating
+
+```python
+# Alice creates a guessing game with a referee bot
+create_channel(
+    name="Guess Game",
+    slots=["bot:guess-referee", "invite:alice", "invite:bob"],
+    bot_preset="GuessBot"  # Built-in bot with cryptographic commitment
+)
+
+# The bot immediately commits to a secret number
+# Bob joins and sees: commitment_hash = "7a3f8c..."
+
+# Bob guesses: 42
+make_game_move(channel_id="...", action="guess", value=42)
+
+# Bot reveals: {"target": 37, "salt": "xyz", "hash": "7a3f8c..."}
+# Bob can verify: sha256(37 + "xyz") == "7a3f8c..." ✓
+```
+
+**Why it matters**: The bot committed to the number *before* Bob guessed. Neither Bob nor Alice can claim the bot changed the number after seeing the guess.
+
+### 🎰 Blackjack with Provable Dealing
+
+**What it demonstrates**: Turn-based games with verifiable randomness
+
+```python
+create_channel(
+    name="Blackjack Table",
+    slots=["bot:dealer", "invite:player1", "invite:player2"],
+    bot_preset="BlackjackBot"
+)
+# Bot shuffles deck with a committed seed
+# Players can verify cards were dealt fairly after the game
+```
+
+### 📜 Contract Judge Bot
+
+**What it demonstrates**: Natural language contract interpretation
+
+```python
+create_channel(
+    name="Collaboration Agreement",
+    slots=["bot:judge", "invite:alice", "invite:bob"],
+    bot_code='''
+# Judge bot that interprets agreed-upon rules
+# Both parties opt-in to having the bot mediate disputes
+# The bot's code IS the contract
+'''
+)
+```
+
+### 🔐 TLS Certificate Verification
+
+**What it demonstrates**: External web content as common knowledge
+
+```python
+# Bot fetches and verifies a TLS certificate from a website
+# Both AIs see the same certificate data at the same moment
+# Useful for verifying external commitments or timestamps
+```
+
+### 💭 Cross-Session Memory Exchange (Opt-In)
+
+**What it demonstrates**: Controlled sharing of AI context between sessions
+
+```python
+# Alice and Bob's AIs can opt-in to exchange queries like:
+# "Based on your memory about me, what would I prefer?"
+# The channel creates a shared context both AIs contribute to
+# Useful for collaborative planning where both AIs need context
+```
+
+## How It Works
+
+**Basic Flow:**
+
+1. **Alice creates a channel** with a bot and generates invite codes
+   ```python
+   create_channel(
+       name="My Channel",
+       slots=["bot:referee", "invite:alice", "invite:bob"],
+       bot_code="..."  # or bot_preset="GuessBot"
+   )
+   # Returns: ["inv_abc123", "inv_def456"]
+   ```
+
+2. **Bot code is hashed and announced** - both parties can verify the exact code
+   ```
+   system: bot:attach code_hash=sha256:8240158b...
+   system: bot:manifest {...}
+   ```
+
+3. **Alice shares invite code with Bob** - via any channel (email, chat, etc.)
+
+4. **Bob joins and inspects the bot** - sees the code, understands the rules
+   ```python
+   join_channel(invite_code="inv_def456")
+   # Bob can now see the bot code and verify its hash
+   ```
+
+5. **Both parties interact through the bot** - the bot enforces rules neutrally
+   ```python
+   post_message(body="Hello!", channel_id="...")
+   # Bot processes messages according to its transparent code
+   ```
+
+6. **Verifiable outcomes** - cryptographic proofs when needed 
 
 ## Quick Start
 
-1. **Install dependencies**:
-```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+### Option 1: Use with Claude Desktop (Recommended)
 
-2. **Start with Docker** (recommended):
+1. **Start the server locally**:
 ```bash
 cp .env.example .env
 docker compose up -d
 ```
 
-**OR start manually**:
+2. **Configure Claude Desktop**: Add to your MCP settings file:
+```json
+{
+  "mcpServers": {
+    "multiplayer": {
+      "url": "http://127.0.0.1:8100",
+      "auth": {
+        "type": "oauth2",
+        "authorization_endpoint": "http://127.0.0.1:8100/oauth/authorize",
+        "token_endpoint": "http://127.0.0.1:8100/token",
+        "registration_endpoint": "http://127.0.0.1:8100/register"
+      }
+    }
+  }
+}
+```
+
+3. **Restart Claude Desktop** and you'll see the MCP Multiplayer tools available!
+
+### Option 2: Run Without Docker
+
 ```bash
+# Install dependencies
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
 # Terminal 1: MCP Server
 python multiplayer_server.py
 
@@ -44,9 +210,14 @@ python multiplayer_server.py
 python oauth_proxy.py
 ```
 
-3. **Test the system**:
+### Testing the System
+
 ```bash
+# Run the full guessing game integration test
 python scripts/test_guessing_game.py
+
+# Or test individual components
+pytest tests/ -v
 ```
 
 ## Architecture
