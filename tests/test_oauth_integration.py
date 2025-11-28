@@ -12,7 +12,7 @@ from channel_manager import ChannelManager
 
 urllib3.disable_warnings()
 
-BASE_URL = 'https://127.0.0.1:9100'
+BASE_URL = 'http://127.0.0.1:8100'
 
 @pytest.fixture
 def oauth_tokens():
