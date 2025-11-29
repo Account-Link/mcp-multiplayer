@@ -140,7 +140,7 @@ class GuessBot:
 
         # Check if message text contains "guess" or process all user messages
         text = body.get('text', '')
-        if text and ('guess' in text.lower() or text.strip().isdigit()):
+        if text:
             self._handle_guess_move(sender, body)
 
     def _start_game(self):
@@ -192,7 +192,13 @@ class GuessBot:
 
         # Get guess value
         guess_text = body.get('text', '')
-        guess = self._extract_number(guess_text)
+        if guess_text == "concede":
+            self._handle_concede(sender)
+            return
+        if not isinstance(guess_text, int):
+            guess = self._extract_number(guess_text)
+        else:
+            guess = guess_text
         if guess is None:
             self.ctx.post("control", {
                 "type": "violation",
