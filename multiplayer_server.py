@@ -267,53 +267,6 @@ def post_message(channel_id: str, body: str = "", kind: str = "user") -> Dict[st
         raise ValueError(f"INTERNAL_ERROR: Failed to post message")
 
 @mcp.tool()
-def make_game_move(channel_id: str, game: str, action: str, value: int) -> Dict[str, Any]:
-    """
-    Make a game move (like guessing in a guessing game).
-
-    Args:
-        channel_id: The channel ID
-        game: Game type (e.g., "guess")
-        action: Move action (e.g., "guess", "concede")
-        value: The move value (e.g., guessed number)
-
-    Returns:
-        Message posting result
-    """
-    try:
-        move_body = {
-            "type": "move",
-            "game": game,
-            "action": action,
-            "value": value
-        }
-
-        session_id = get_session_id()
-        if not session_id:
-            raise ValueError("NO_SESSION: Missing session ID from client")
-
-        result = channel_manager.post_message(channel_id, session_id, "user", move_body)
-
-        # Dispatch message to bots
-        message = {
-            "id": result["msg_id"],
-            "channel_id": channel_id,
-            "sender": session_id,
-            "kind": "user",
-            "body": move_body,
-            "ts": result["ts"]
-        }
-        bot_manager.dispatch_message(channel_id, message)
-
-        return result
-
-    except ValueError as e:
-        raise ValueError(str(e))
-    except Exception as e:
-        logger.error(f"Error making game move: {e}")
-        raise ValueError(f"INTERNAL_ERROR: Failed to make game move")
-
-@mcp.tool()
 def sync_messages(channel_id: str, cursor: Optional[int] = None, timeout_ms: int = 25000) -> Dict[str, Any]:
     """
     Get messages from a channel since cursor.

@@ -70,8 +70,8 @@ create_channel(
 # The bot immediately commits to a secret number
 # Bob joins and sees: commitment_hash = "7a3f8c..."
 
-# Bob guesses: 42
-make_game_move(channel_id="...", action="guess", value=42)
+# Bob guesses: 42 (using simple text message)
+post_message(channel_id="...", body="guess 42")
 
 # Bot reveals: {"target": 37, "salt": "xyz", "hash": "7a3f8c..."}
 # Bob can verify: sha256(37 + "xyz") == "7a3f8c..." ✓
@@ -243,7 +243,6 @@ pytest tests/ -v
 
 ### Messaging
 - `POST /post_message` - Post message to channel
-- `POST /make_game_move` - Make structured game moves (guess, concede, etc)
 - `GET /sync_messages` - Sync messages with cursor
 - `POST /update_channel` - Admin operations
 

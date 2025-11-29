@@ -6,6 +6,7 @@ GuessBot - Turn-based number guessing referee bot
 import hashlib
 import os
 import random
+import re
 from typing import Dict, Any, List
 
 class GuessBot:
@@ -80,6 +81,15 @@ class GuessBot:
         self.guess_count = state.get('guess_count', 0)
         self.mode = state.get('mode', 'number')
         self.range = state.get('range', [1, 100])
+    
+    def _extract_number(self, text):
+        # Find all numbers in the string
+        if not text:
+            return None
+        numbers = re.findall(r'\d+', text)
+        if numbers:
+            return int(numbers[-1])  # Get the last number (or numbers[0] for first)
+        return None
 
     def on_init(self):
         """Initialize the game when bot is attached."""
@@ -128,7 +138,9 @@ class GuessBot:
         body = msg.get('body', {})
         sender = msg.get('sender')
 
-        if body.get('type') == 'move' and body.get('game') == 'guess':
+        # Check if message text contains "guess" or process all user messages
+        text = body.get('text', '')
+        if text and ('guess' in text.lower() or text.strip().isdigit()):
             self._handle_guess_move(sender, body)
 
     def _start_game(self):
@@ -178,37 +190,14 @@ class GuessBot:
             })
             return
 
-        # Validate guess
-        action = body.get('action', 'guess')
-        if action == 'concede':
-            self._handle_concede(sender)
-            return
-
-        if action != 'guess':
-            self.ctx.post("control", {
-                "type": "violation",
-                "reason": "BAD_MOVE",
-                "details": f"Unknown action: {action}"
-            })
-            return
-
         # Get guess value
-        guess = body.get('value')
+        guess_text = body.get('text', '')
+        guess = self._extract_number(guess_text)
         if guess is None:
             self.ctx.post("control", {
                 "type": "violation",
                 "reason": "BAD_MOVE",
                 "details": "Missing guess value"
-            })
-            return
-
-        try:
-            guess = int(guess)
-        except (ValueError, TypeError):
-            self.ctx.post("control", {
-                "type": "violation",
-                "reason": "BAD_MOVE",
-                "details": "Guess must be a number"
             })
             return
 

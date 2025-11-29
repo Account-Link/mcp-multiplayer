@@ -68,11 +68,11 @@ def test_guessing_game():
                 print(f"   🤖 {sender}: {body}")
 
         print("\n🎯 Alice makes first guess: 50")
-        alice_guess = alice.call_tool("make_game_move", {
+        # Note: post_message now only accepts simple text. For game moves with structured data,
+        # the bot would need to be updated to parse JSON from text, or moves need to be done programmatically.
+        alice_guess = alice.call_tool("post_message", {
             "channel_id": channel_id,
-            "game": "guess",
-            "action": "guess",
-            "value": 50
+            "body": "guess 50"
         })
         print(f"✅ Alice's guess posted: {alice_guess.get('msg_id')}")
 
@@ -96,11 +96,9 @@ def test_guessing_game():
             print("🎉 GuessBot is working! It responded to Alice's guess.")
 
             print("\n🎯 Bob makes a guess: 25")
-            bob_guess = bob.call_tool("make_game_move", {
+            bob_guess = bob.call_tool("post_message", {
                 "channel_id": channel_id,
-                "game": "guess",
-                "action": "guess",
-                "value": 25
+                "body": "guess 25"
             })
 
             print("\n📥 Final game state...")
