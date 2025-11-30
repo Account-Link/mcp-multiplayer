@@ -143,6 +143,39 @@ class GuessBot:
         if text:
             self._handle_guess_move(sender, body)
 
+    def on_private_message(self, slot_id: str, msg: Dict[str, Any]):
+        """Handle private messages from players (via dm_bot)."""
+        text = msg.get('text', '').strip()
+
+        if text == '!status':
+            # Respond with game status privately
+            current_turn = None
+            if self.players and not self.game_ended:
+                current_turn = self.players[self.turn_index % len(self.players)]
+
+            self.ctx.dm(slot_id, "private", {
+                "type": "status",
+                "game_started": self.game_started,
+                "game_ended": self.game_ended,
+                "player_count": len(self.players),
+                "guess_count": self.guess_count,
+                "current_turn": current_turn,
+                "range": self.range
+            })
+
+        elif text == '!help':
+            self.ctx.dm(slot_id, "private", {
+                "type": "help",
+                "commands": ["!status - Get game status", "!help - Show this help"],
+                "note": "Use public messages for guesses"
+            })
+
+        else:
+            self.ctx.dm(slot_id, "private", {
+                "type": "error",
+                "text": f"Unknown command: {text}. Try !help"
+            })
+
     def _start_game(self):
         """Start the game when enough players have joined."""
         self.game_started = True

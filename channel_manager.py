@@ -28,6 +28,7 @@ class Message:
     kind: str  # "user", "bot", "system", "control"
     body: Dict[str, Any]
     ts: str
+    to_slot: Optional[str] = None  # None = public, "s0" = private to slot
 
 @dataclass
 class ChannelView:
@@ -279,6 +280,42 @@ class ChannelManager:
 
             return {"msg_id": msg_id, "ts": ts}
 
+    def post_private_message(self, channel_id: str, sender: str, to_slot: str,
+                             kind: str, body: Dict[str, Any]) -> Dict:
+        """
+        Post a private message visible only to a specific slot.
+
+        Args:
+            channel_id: The channel ID
+            sender: The sender identifier (e.g., "bot:GuessBot_0")
+            to_slot: The slot_id this message is addressed to
+            kind: Message type (e.g., "private")
+            body: Message body
+
+        Returns:
+            {msg_id, ts}
+        """
+        with self.lock:
+            if channel_id not in self.channels:
+                raise ValueError("CHANNEL_NOT_FOUND")
+
+            msg_id = self._next_message_id()
+            ts = datetime.utcnow().isoformat()
+
+            message = Message(
+                id=msg_id,
+                channel_id=channel_id,
+                sender=sender,
+                kind=kind,
+                body=body,
+                ts=ts,
+                to_slot=to_slot
+            )
+
+            self.channels[channel_id]["messages"].append(message)
+
+            return {"msg_id": msg_id, "ts": ts}
+
     def sync_messages(self, channel_id: str, session_id: str, cursor: Optional[int] = None,
                      timeout_ms: int = 25000) -> Dict:
         """
@@ -286,6 +323,7 @@ class ChannelManager:
 
         Cursor is your watermark - the highest message ID you've seen so far.
         Returns all messages with ID > cursor, and new cursor for next call.
+        Private messages (to_slot set) are filtered - only visible to recipient.
 
         Returns:
             {messages: [Message], cursor: int, view: ChannelView | null}
@@ -302,8 +340,16 @@ class ChannelManager:
             if cursor is None:
                 cursor = 0
 
-            # Get new messages
-            new_messages = [msg for msg in messages if msg.id > cursor]
+            # Get player's slot_id for filtering private messages
+            player_slot_id = self.get_slot_id_for_session(channel_id, session_id)
+
+            # Get new messages, filtering by to_slot:
+            # - Include public messages (to_slot is None)
+            # - Include private messages addressed to this player's slot
+            new_messages = [
+                msg for msg in messages 
+                if msg.id > cursor and (msg.to_slot is None or msg.to_slot == player_slot_id)
+            ]
 
             # If no new messages and timeout requested, implement simple polling
             if not new_messages and timeout_ms > 0:
@@ -394,6 +440,16 @@ class ChannelManager:
 
         return any(slot.filled_by == session_id and slot.admin
                   for slot in channel["slots"])
+
+    def get_slot_id_for_session(self, channel_id: str, session_id: str) -> Optional[str]:
+        """Get slot_id for a session in a channel."""
+        channel = self.channels.get(channel_id)
+        if not channel:
+            return None
+        for slot in channel["slots"]:
+            if slot.filled_by == session_id:
+                return slot.slot_id
+        return None
 
     def _get_channel_view(self, channel_id: str) -> ChannelView:
         """Get channel view for external consumption."""

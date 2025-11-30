@@ -267,6 +267,52 @@ def post_message(channel_id: str, body: str = "", kind: str = "user") -> Dict[st
         raise ValueError(f"INTERNAL_ERROR: Failed to post message")
 
 @mcp.tool()
+def dm_bot(channel_id: str, bot_id: str, message: str) -> Dict[str, Any]:
+    """
+    Send a private message to a bot (like IRC /msg).
+
+    Use this for commands or data you don't want visible to other players.
+    The bot may respond privately - check sync_messages for responses.
+
+    Args:
+        channel_id: The channel ID
+        bot_id: The bot ID (from bots array in join response)
+        message: The private message (use !command conventions, e.g. "!status")
+
+    Returns:
+        Confirmation that message was delivered to bot
+    """
+    try:
+        if not channel_id or not bot_id or not message:
+            raise ValueError("channel_id, bot_id, and message are required")
+
+        session_id = get_session_id()
+        if not session_id:
+            raise ValueError("NO_SESSION: Missing session ID from client")
+
+        # Get slot_id from session
+        slot_id = channel_manager.get_slot_id_for_session(channel_id, session_id)
+        if not slot_id:
+            raise ValueError("NOT_MEMBER: You are not a member of this channel")
+
+        # Verify bot exists
+        if channel_id not in bot_manager.bot_instances:
+            raise ValueError("CHANNEL_NOT_FOUND")
+        if bot_id not in bot_manager.bot_instances[channel_id]:
+            raise ValueError("BOT_NOT_FOUND: Bot not found in this channel")
+
+        # Dispatch to bot (message is ephemeral, not stored)
+        bot_manager.dispatch_private_message(channel_id, bot_id, slot_id, {"text": message})
+
+        return {"ok": True, "delivered_to": bot_id}
+
+    except ValueError as e:
+        raise ValueError(str(e))
+    except Exception as e:
+        logger.error(f"Error in dm_bot: {e}")
+        raise ValueError(f"INTERNAL_ERROR: Failed to send private message")
+
+@mcp.tool()
 def sync_messages(channel_id: str, cursor: Optional[int] = None, timeout_ms: int = 25000) -> Dict[str, Any]:
     """
     Get messages from a channel since cursor.

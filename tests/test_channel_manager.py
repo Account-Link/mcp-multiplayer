@@ -416,3 +416,170 @@ class TestMembershipChecks:
 
         assert cm._is_admin(channel_id, "bot:AdminBot") is True
         assert cm._is_admin(channel_id, "sess_123") is False
+
+
+class TestPrivateMessages:
+    def test_message_to_slot_field(self):
+        """Test Message dataclass has to_slot field."""
+        msg = Message(
+            id=1,
+            channel_id="chn_test",
+            sender="sess_123",
+            kind="user",
+            body={"text": "hello"},
+            ts="2024-01-01T00:00:00",
+            to_slot="s1"
+        )
+        assert msg.to_slot == "s1"
+
+        # Default should be None
+        msg_public = Message(
+            id=2,
+            channel_id="chn_test",
+            sender="sess_123",
+            kind="user",
+            body={"text": "public"},
+            ts="2024-01-01T00:00:00"
+        )
+        assert msg_public.to_slot is None
+
+    def test_post_private_message(self):
+        """Test posting a private message sets to_slot."""
+        cm = ChannelManager()
+
+        result = cm.create_channel(
+            name="Test",
+            slots=["invite:player1", "invite:player2"]
+        )
+
+        channel_id = result["channel_id"]
+
+        # Post a private message
+        post_result = cm.post_private_message(
+            channel_id=channel_id,
+            sender="bot:TestBot",
+            to_slot="s0",
+            kind="private",
+            body={"text": "secret message"}
+        )
+
+        assert "msg_id" in post_result
+        assert "ts" in post_result
+
+        # Check message was stored with to_slot
+        messages = cm.channels[channel_id]["messages"]
+        private_msg = next(m for m in messages if m.kind == "private")
+        assert private_msg.to_slot == "s0"
+        assert private_msg.sender == "bot:TestBot"
+        assert private_msg.body["text"] == "secret message"
+
+    def test_sync_filters_private_messages(self):
+        """Test sync_messages filters by to_slot - player only sees their messages."""
+        cm = ChannelManager()
+
+        result = cm.create_channel(
+            name="Test",
+            slots=["invite:player1", "invite:player2"]
+        )
+
+        channel_id = result["channel_id"]
+        invite1, invite2 = result["invites"]
+
+        # Both players join
+        cm.join_channel(invite1, "sess_alice")  # slot s0
+        cm.join_channel(invite2, "sess_bob")    # slot s1
+
+        # Post a public message
+        cm.post_message(channel_id, "sess_alice", "user", {"text": "public hello"})
+
+        # Post a private message to Alice (s0)
+        cm.post_private_message(
+            channel_id=channel_id,
+            sender="bot:TestBot",
+            to_slot="s0",
+            kind="private",
+            body={"text": "secret for alice"}
+        )
+
+        # Post a private message to Bob (s1)
+        cm.post_private_message(
+            channel_id=channel_id,
+            sender="bot:TestBot",
+            to_slot="s1",
+            kind="private",
+            body={"text": "secret for bob"}
+        )
+
+        # Alice syncs - should see public + her private
+        alice_sync = cm.sync_messages(channel_id, "sess_alice")
+        alice_msgs = alice_sync["messages"]
+        alice_private = [m for m in alice_msgs if m.get("to_slot") == "s0"]
+        alice_bob_private = [m for m in alice_msgs if m.get("to_slot") == "s1"]
+
+        assert len(alice_private) == 1
+        assert alice_private[0]["body"]["text"] == "secret for alice"
+        assert len(alice_bob_private) == 0  # Alice can't see Bob's private messages
+
+        # Bob syncs - should see public + his private
+        bob_sync = cm.sync_messages(channel_id, "sess_bob")
+        bob_msgs = bob_sync["messages"]
+        bob_private = [m for m in bob_msgs if m.get("to_slot") == "s1"]
+        bob_alice_private = [m for m in bob_msgs if m.get("to_slot") == "s0"]
+
+        assert len(bob_private) == 1
+        assert bob_private[0]["body"]["text"] == "secret for bob"
+        assert len(bob_alice_private) == 0  # Bob can't see Alice's private messages
+
+    def test_sync_shows_public_messages(self):
+        """Test sync_messages shows public messages (to_slot=None) to everyone."""
+        cm = ChannelManager()
+
+        result = cm.create_channel(
+            name="Test",
+            slots=["invite:player1", "invite:player2"]
+        )
+
+        channel_id = result["channel_id"]
+        invite1, invite2 = result["invites"]
+
+        cm.join_channel(invite1, "sess_alice")
+        cm.join_channel(invite2, "sess_bob")
+
+        # Post public messages
+        cm.post_message(channel_id, "sess_alice", "user", {"text": "hi from alice"})
+        cm.post_message(channel_id, "sess_bob", "user", {"text": "hi from bob"})
+
+        # Both should see all public messages
+        alice_sync = cm.sync_messages(channel_id, "sess_alice")
+        bob_sync = cm.sync_messages(channel_id, "sess_bob")
+
+        alice_user_msgs = [m for m in alice_sync["messages"] if m["kind"] == "user"]
+        bob_user_msgs = [m for m in bob_sync["messages"] if m["kind"] == "user"]
+
+        assert len(alice_user_msgs) == 2
+        assert len(bob_user_msgs) == 2
+
+    def test_get_slot_id_for_session(self):
+        """Test get_slot_id_for_session helper."""
+        cm = ChannelManager()
+
+        result = cm.create_channel(
+            name="Test",
+            slots=["invite:player1", "invite:player2"]
+        )
+
+        channel_id = result["channel_id"]
+        invite1 = result["invites"][0]
+
+        # Before joining, should return None
+        assert cm.get_slot_id_for_session(channel_id, "sess_alice") is None
+
+        # After joining, should return slot_id
+        join_result = cm.join_channel(invite1, "sess_alice")
+        assert cm.get_slot_id_for_session(channel_id, "sess_alice") == join_result["slot_id"]
+
+        # Unknown session should return None
+        assert cm.get_slot_id_for_session(channel_id, "sess_unknown") is None
+
+        # Unknown channel should return None
+        assert cm.get_slot_id_for_session("unknown_channel", "sess_alice") is None

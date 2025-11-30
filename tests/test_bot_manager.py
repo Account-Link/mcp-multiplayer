@@ -326,3 +326,158 @@ class TestBotContext:
             new_state = {"new": "state"}
             ctx.set_state(new_state)
             mock_set.assert_called_once_with("test_channel", "test_bot", new_state)
+
+
+class TestPrivateMessaging:
+    def test_dispatch_private_message_to_specific_bot(self):
+        """Test dispatch_private_message only calls target bot."""
+        cm = ChannelManager()
+        bm = BotManager(cm)
+
+        # Create channel and attach bot
+        result = cm.create_channel("Test", ["invite:player1"])
+        channel_id = result["channel_id"]
+
+        bot_def = BotDefinition(
+            name="GuessBot",
+            version="1.0",
+            code_ref="builtin://GuessBot",
+            manifest={"hooks": ["on_private_message"]}
+        )
+
+        attach_result = bm.attach_bot(channel_id, bot_def)
+        bot_id = attach_result["bot_id"]
+
+        # Mock the bot hook call
+        with patch.object(bm, '_call_bot_hook') as mock_hook:
+            test_message = {"text": "!status"}
+            bm.dispatch_private_message(channel_id, bot_id, "s0", test_message)
+
+            mock_hook.assert_called_once_with(
+                channel_id, bot_id, "on_private_message", "s0", test_message
+            )
+
+    def test_dispatch_private_message_not_broadcast(self):
+        """Test private message is NOT dispatched to other bots."""
+        cm = ChannelManager()
+        bm = BotManager(cm)
+
+        # Create channel
+        result = cm.create_channel("Test", ["invite:player1"])
+        channel_id = result["channel_id"]
+
+        # Attach two bots
+        bot_def1 = BotDefinition(
+            name="GuessBot",
+            version="1.0",
+            code_ref="builtin://GuessBot",
+            manifest={"hooks": ["on_private_message"]}
+        )
+
+        inline_code = '''
+class OtherBot:
+    def __init__(self, ctx, params):
+        self.ctx = ctx
+    def on_private_message(self, slot_id, msg):
+        pass
+'''
+        bot_def2 = BotDefinition(
+            name="OtherBot",
+            version="1.0",
+            inline_code=inline_code,
+            manifest={"hooks": ["on_private_message"]}
+        )
+
+        attach1 = bm.attach_bot(channel_id, bot_def1)
+        attach2 = bm.attach_bot(channel_id, bot_def2)
+        bot_id1 = attach1["bot_id"]
+        bot_id2 = attach2["bot_id"]
+
+        # Mock the bot hook call
+        with patch.object(bm, '_call_bot_hook') as mock_hook:
+            test_message = {"text": "!status"}
+            # Send to bot1 only
+            bm.dispatch_private_message(channel_id, bot_id1, "s0", test_message)
+
+            # Should only call bot1, not bot2
+            mock_hook.assert_called_once_with(
+                channel_id, bot_id1, "on_private_message", "s0", test_message
+            )
+
+    def test_bot_context_dm(self):
+        """Test ctx.dm posts message with to_slot set."""
+        cm = ChannelManager()
+        bm = BotManager(cm)
+
+        # Create channel
+        result = cm.create_channel("Test", ["invite:player1"])
+        channel_id = result["channel_id"]
+
+        ctx = BotContext(channel_id, "test_bot", bm)
+
+        # Mock the bot manager's post_private_message_from_bot method
+        with patch.object(bm, 'post_private_message_from_bot') as mock_dm:
+            mock_dm.return_value = {"msg_id": 1, "ts": "2025-01-01T00:00:00Z"}
+
+            result = ctx.dm("s0", "private", {"type": "response"})
+
+            mock_dm.assert_called_once_with(
+                channel_id, "test_bot", "s0", "private", {"type": "response"}
+            )
+
+    def test_post_private_message_from_bot(self):
+        """Test bot can post private message to specific slot."""
+        cm = ChannelManager()
+        bm = BotManager(cm)
+
+        # Create channel
+        result = cm.create_channel("Test", ["invite:player1", "invite:player2"])
+        channel_id = result["channel_id"]
+
+        # Attach bot
+        bot_def = BotDefinition(
+            name="GuessBot",
+            version="1.0",
+            code_ref="builtin://GuessBot"
+        )
+
+        attach_result = bm.attach_bot(channel_id, bot_def)
+        bot_id = attach_result["bot_id"]
+
+        # Post private message from bot
+        body = {"type": "private_response", "message": "secret"}
+        post_result = bm.post_private_message_from_bot(
+            channel_id, bot_id, "s0", "private", body
+        )
+
+        assert "msg_id" in post_result
+        assert "ts" in post_result
+
+        # Check message was stored with to_slot
+        messages = cm.channels[channel_id]["messages"]
+        private_messages = [m for m in messages if m.to_slot == "s0"]
+        assert len(private_messages) >= 1
+
+        last_private = private_messages[-1]
+        assert last_private.sender == f"bot:{bot_id}"
+        assert last_private.body["type"] == "private_response"
+        assert last_private.body["bot_id"] == bot_id
+
+    def test_dispatch_private_message_invalid_channel(self):
+        """Test dispatch_private_message with invalid channel does nothing."""
+        cm = ChannelManager()
+        bm = BotManager(cm)
+
+        # Should not raise, just return silently
+        bm.dispatch_private_message("invalid_channel", "some_bot", "s0", {"text": "test"})
+
+    def test_dispatch_private_message_invalid_bot(self):
+        """Test dispatch_private_message with invalid bot_id does nothing."""
+        cm = ChannelManager()
+        bm = BotManager(cm)
+
+        result = cm.create_channel("Test", ["invite:player1"])
+        channel_id = result["channel_id"]
+
+        # Should not raise, just return silently
+        bm.dispatch_private_message(channel_id, "invalid_bot", "s0", {"text": "test"})
