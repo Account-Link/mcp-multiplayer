@@ -466,7 +466,6 @@ def list_channels() -> Dict[str, Any]:
 
 if __name__ == "__main__":
     host = os.getenv("MCP_HOST", "127.0.0.1")
-    port = int(os.getenv("MCP_PORT", "9201"))
-
+    port = int(os.getenv("MCP_PORT", "8201"))
     logger.info(f"Starting Multiplayer MCP server on {host}:{port}")
     mcp.run(transport="streamable-http", host=host, port=port)
