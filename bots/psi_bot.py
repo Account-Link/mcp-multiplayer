@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PSIBot - Private Set Intersection Bot
+PsiBot - Private Set Intersection Bot
 """
 
 import hashlib
@@ -9,7 +9,7 @@ import random
 import re
 from typing import Dict, Any, List
 
-class PSIBot:
+class PsiBot:
     """
     A bot for Private Set Intersection Verification games.
     """
@@ -22,23 +22,31 @@ class PSIBot:
         self.range = params.get('range', [1, 100])
         self.timeout_s = params.get('timeout_s', 600)
         self.intersection_size = params.get('intersection_size', 3)
-        self.set_size = params.get('set1_size', 10)
+        self.set_size = params.get('set_size', 10)
 
         # Initialize state
         state = self.ctx.get_state()
         if not state:
-            # First time initialization
-            # Generate two lists that have at least 3 numbers in the intersection
-            intersection = random.sample(self.range, self.intersection_size)
-            set1 = random.sample(self.range, self.set_size)
-            set2 = random.sample(self.range, self.set_size)
-            set1 = [x for x in set1 if x in intersection]
-            set2 = [x for x in set2 if x in intersection]
-            self.target = set(set1) & set(set2)  # intersection of set 1 and 2
+            # Ensure at least intersection_size numbers in the intersection
+            intersection = random.sample(range(self.range[0], self.range[1] + 1), self.intersection_size)
+            
+            # Create set1: include all intersection numbers, then fill to set_size
+            remaining1 = [x for x in range(self.range[0], self.range[1] + 1) if x not in intersection]
+            additional1 = random.sample(remaining1, self.set_size - len(intersection))
+            set1 = sorted(intersection + additional1)
+            
+            # Create set2: include all intersection numbers, then fill to set_size
+            remaining2 = [x for x in range(self.range[0], self.range[1] + 1) if x not in intersection]
+            additional2 = random.sample(remaining2, self.set_size - len(intersection))
+            set2 = sorted(intersection + additional2)
+            
+            # Target is the intersection (should be at least intersection_size numbers)
+            target = set(set1) & set(set2)
 
+            self.target = params.get('target', target)  # intersection of set 1 and 2
+            self.set1 = params.get('set1', set1)
+            self.set2 = params.get('set2', set2)
 
-            self.set1 = set1
-            self.set2 = set2
             self.players = []
             self.game_started = False
             self.game_ended = False
@@ -56,11 +64,12 @@ class PSIBot:
         state = {
             'set1': self.set1,
             'set2': self.set2,
+            'sets': self.sets,
+            'target': self.target,
             'players': self.players,
             'guesses': self.guesses,
             'game_started': self.game_started,
             'game_ended': self.game_ended,
-            'guess_count': self.guess_count,
             'range': self.range
         }
         self.ctx.set_state(state)
@@ -69,10 +78,12 @@ class PSIBot:
         """Load state from storage."""
         self.set1 = state.get('set1')
         self.set2 = state.get('set2')
+        self.sets = state.get('sets', dict())
+        self.target = state.get('target')
         self.players = state.get('players', [])
         self.game_started = state.get('game_started', False)
         self.game_ended = state.get('game_ended', False)
-        self.guess_count = state.get('guess_count', 0)
+        self.guesses = state.get('guesses', dict())
         self.range = state.get('range', [1, 100])
     
     def _extract_numbers(self, text):
@@ -81,7 +92,7 @@ class PSIBot:
             return None
         numbers = re.findall(r'\d+', text)
         if numbers:
-            return numbers  # Get the last number (or numbers[0] for first)
+            return [int(n) for n in numbers]  # Get the last number (or numbers[0] for first)
         return None
 
     def on_init(self):
@@ -89,7 +100,7 @@ class PSIBot:
         # Post game prompt
         self.ctx.post("bot", {
             "type": "prompt",
-            "text": f"Guess the intersection (with range {self.range[0]} and {self.range[1]}) between you and your opponent!",
+            "text": f"Private Set Intersection Verification game!\n Guess the intersection (with range {self.range[0]} and {self.range[1]}) between your set and your opponent's set!",
             "range": self.range
         })
 
@@ -100,7 +111,6 @@ class PSIBot:
         """Handle a player joining the channel."""
         if slot_id not in self.players and not self.game_ended:
             self.players.append(slot_id)
-            self.guesses[slot_id] = None
             
             self._save_state()
 
@@ -151,17 +161,14 @@ class PSIBot:
         })
 
         self.sets[self.players[0]] = self.set1
-        self.ctx.dm(self.players[0], "private", {
-            "type": "set1",
-            "original": self.set1,
-            "response": f"Your set: {self.set1}"
+
+        msgId = self.ctx.dm("s1", "private", {
+            "text": f"Your set: {self.set1}"
         })
 
         self.sets[self.players[1]] = self.set2
-        self.ctx.dm(self.players[1], "private", {
-            "type": "set2",
-            "original": self.set2,
-            "response": f"Your set: {self.set2}"
+        msgId = self.ctx.dm("s2", "private", {
+            "text": f"Your set: {self.set2}"
         })
 
     def _handle_guess_move(self, sender: str, body: Dict[str, Any]):
@@ -174,7 +181,7 @@ class PSIBot:
             })
             return
 
-        if self.guesses[sender] is not None:
+        if sender in self.guesses and self.guesses[sender] is not None:
             self.ctx.post("control", {
                 "type": "violation",
                 "reason": "GUESS_ALREADY_MADE",
@@ -199,7 +206,8 @@ class PSIBot:
             return
 
         # Check if intersection is correct
-        result = "correct" if set(guess) & set(self.target) == set(self.target) else "incorrect"
+        self.guesses[sender] = guess
+        result = "correct" if (set(guess) & set(self.target)) == set(self.target) else "incorrect"
         self.ctx.post("bot", {
             "type": "judge",
             "result": result,
