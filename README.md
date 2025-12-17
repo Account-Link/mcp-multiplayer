@@ -70,8 +70,8 @@ create_channel(
 # The bot immediately commits to a secret number
 # Bob joins and sees: commitment_hash = "7a3f8c..."
 
-# Bob guesses: 42
-make_game_move(channel_id="...", action="guess", value=42)
+# Bob guesses: 42 (using simple text message)
+post_message(channel_id="...", body="guess 42")
 
 # Bot reveals: {"target": 37, "salt": "xyz", "hash": "7a3f8c..."}
 # Bob can verify: sha256(37 + "xyz") == "7a3f8c..." ✓
@@ -170,30 +170,33 @@ create_channel(
 
 ### Option 1: Use with Claude Desktop (Recommended)
 
-1. **Start the server locally**:
+1. **Install Node.js** (required for the MCP bridge):
+```bash
+brew install node
+```
+
+2. **Start the server locally**:
 ```bash
 cp .env.example .env
 docker compose up -d
 ```
 
-2. **Configure Claude Desktop**: Add to your MCP settings file:
+3. **Configure Claude Desktop**: Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
     "multiplayer": {
-      "url": "http://127.0.0.1:8100",
-      "auth": {
-        "type": "oauth2",
-        "authorization_endpoint": "http://127.0.0.1:8100/oauth/authorize",
-        "token_endpoint": "http://127.0.0.1:8100/token",
-        "registration_endpoint": "http://127.0.0.1:8100/register"
-      }
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://127.0.0.1:8201/mcp"],
+      "env": {}
     }
   }
 }
 ```
 
-3. **Restart Claude Desktop** and you'll see the MCP Multiplayer tools available!
+4. **Restart Claude Desktop** and you'll see the MCP Multiplayer tools available!
+
+**How it works**: Claude Desktop uses stdio transport, while the server uses HTTP. The `mcp-remote` package bridges between them, connecting Claude Desktop to your Docker container's HTTP server on port 8201.
 
 ### Option 2: Run Without Docker
 
@@ -243,7 +246,6 @@ pytest tests/ -v
 
 ### Messaging
 - `POST /post_message` - Post message to channel
-- `POST /make_game_move` - Make structured game moves (guess, concede, etc)
 - `GET /sync_messages` - Sync messages with cursor
 - `POST /update_channel` - Admin operations
 
@@ -546,36 +548,41 @@ Claude follows a sophisticated OAuth 2.1 flow with Dynamic Client Registration:
 - Proper PKCE verification maintains security
 - FastMCP session management works seamlessly
 
-### Claude Configuration
+### Claude Desktop Configuration
 
-For Claude clients, configure MCP server as:
+Claude Desktop requires a command-based configuration using `mcp-remote` to bridge stdio to HTTP.
 
+**For local development** (Docker on localhost):
 ```json
 {
-  "name": "MCP Multiplayer",
-  "url": "https://your-domain.com",
-  "auth": {
-    "type": "oauth2",
-    "authorization_endpoint": "https://your-domain.com/oauth/authorize",
-    "token_endpoint": "https://your-domain.com/token",
-    "registration_endpoint": "https://your-domain.com/register"
+  "mcpServers": {
+    "multiplayer": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://127.0.0.1:8201/mcp"],
+      "env": {}
+    }
   }
 }
 ```
 
-For local testing without domain:
+**For remote/production servers**:
 ```json
 {
-  "name": "MCP Multiplayer Local",
-  "url": "http://127.0.0.1:8100",
-  "auth": {
-    "type": "oauth2",
-    "authorization_endpoint": "http://127.0.0.1:8100/oauth/authorize",
-    "token_endpoint": "http://127.0.0.1:8100/token",
-    "registration_endpoint": "http://127.0.0.1:8100/register"
+  "mcpServers": {
+    "multiplayer": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://your-domain.com/mcp"],
+      "env": {}
+    }
   }
 }
 ```
+
+**Config file location**:
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+**Note**: Requires Node.js installed (`brew install node` on macOS).
 
 ## Troubleshooting
 

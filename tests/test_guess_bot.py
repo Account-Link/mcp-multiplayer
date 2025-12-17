@@ -117,12 +117,7 @@ class TestGuessBot:
         move_msg = {
             "kind": "user",
             "sender": first_player,  # Use the actual first player
-            "body": {
-                "type": "move",
-                "game": "guess",
-                "action": "guess",
-                "value": 42
-            }
+            "body": {"text": 42}
         }
 
         bot.on_message(move_msg)
@@ -157,12 +152,7 @@ class TestGuessBot:
         move_msg = {
             "kind": "user",
             "sender": first_player,
-            "body": {
-                "type": "move",
-                "game": "guess",
-                "action": "guess",
-                "value": 80
-            }
+            "body": {"text": "80"}
         }
 
         bot.on_message(move_msg)
@@ -195,12 +185,7 @@ class TestGuessBot:
         move_msg = {
             "kind": "user",
             "sender": first_player,
-            "body": {
-                "type": "move",
-                "game": "guess",
-                "action": "guess",
-                "value": 10
-            }
+            "body": {"text": "10"}
         }
 
         bot.on_message(move_msg)
@@ -227,12 +212,7 @@ class TestGuessBot:
         move_msg = {
             "kind": "user",
             "sender": wrong_player,
-            "body": {
-                "type": "move",
-                "game": "guess",
-                "action": "guess",
-                "value": 50
-            }
+            "body": {"text": "50"}
         }
 
         bot.on_message(move_msg)
@@ -258,12 +238,7 @@ class TestGuessBot:
         move_msg = {
             "kind": "user",
             "sender": first_player,
-            "body": {
-                "type": "move",
-                "game": "guess",
-                "action": "guess",
-                "value": 150
-            }
+            "body": {"text": "150"}
         }
 
         bot.on_message(move_msg)
@@ -289,12 +264,7 @@ class TestGuessBot:
         move_msg = {
             "kind": "user",
             "sender": first_player,
-            "body": {
-                "type": "move",
-                "game": "guess",
-                "action": "guess",
-                "value": "not_a_number"
-            }
+            "body": {"text": "not_a_number"}
         }
 
         bot.on_message(move_msg)
@@ -320,11 +290,7 @@ class TestGuessBot:
         move_msg = {
             "kind": "user",
             "sender": first_player,
-            "body": {
-                "type": "move",
-                "game": "guess",
-                "action": "concede"
-            }
+            "body": {"text": "concede"}
         }
 
         bot.on_message(move_msg)

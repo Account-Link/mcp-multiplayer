@@ -4,3 +4,4 @@ requests
 flask
 python-dotenv
 RestrictedPython
+pytest

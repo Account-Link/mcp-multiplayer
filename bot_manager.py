@@ -61,6 +61,12 @@ class BotContext:
         """Update bot's state."""
         return self.bot_manager.set_bot_state(self.channel_id, self.bot_id, state)
 
+    def dm(self, slot_id: str, kind: str, body: Dict[str, Any]):
+        """Send a private message to a specific player slot."""
+        return self.bot_manager.post_private_message_from_bot(
+            self.channel_id, self.bot_id, slot_id, kind, body
+        )
+
 class BotInstance:
     """Runtime instance of a bot attached to a channel."""
 
@@ -406,6 +412,32 @@ class BotManager:
         return self.channel_manager.post_message(
             channel_id, bot_sender, kind, enhanced_body
         )
+
+    def post_private_message_from_bot(self, channel_id: str, bot_id: str,
+                                       to_slot: str, kind: str, body: Dict[str, Any]) -> Dict:
+        """Post a private message from a bot to a specific slot."""
+        enhanced_body = {
+            **body,
+            "bot_id": bot_id,
+            "state_version": self.get_bot_state_version(channel_id, bot_id)
+        }
+        bot_sender = f"bot:{bot_id}"
+        return self.channel_manager.post_private_message(
+            channel_id, bot_sender, to_slot, kind, enhanced_body
+        )
+
+    def dispatch_private_message(self, channel_id: str, target_bot_id: str,
+                                  slot_id: str, message: Dict[str, Any]):
+        """Dispatch a private message to a specific bot only (not broadcast)."""
+        with self.lock:
+            if channel_id not in self.bot_instances:
+                return
+            if target_bot_id not in self.bot_instances[channel_id]:
+                return
+            try:
+                self._call_bot_hook(channel_id, target_bot_id, "on_private_message", slot_id, message)
+            except Exception as e:
+                print(f"Error dispatching private message to bot {target_bot_id}: {e}")
 
     def get_bot_state(self, channel_id: str, bot_id: str) -> Dict[str, Any]:
         """Get bot's state."""

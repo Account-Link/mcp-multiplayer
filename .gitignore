@@ -58,3 +58,9 @@ Thumbs.db
 
 # Test environment config
 .env.scripts
+
+# Auto generated test files
+alice_tokens.json
+bob_tokens.json
+tokens.json
+mcp_tokens.json

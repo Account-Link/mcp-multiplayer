@@ -561,7 +561,7 @@ if __name__ == "__main__":
     load_dotenv()
 
     host = os.getenv("PROXY_HOST", "127.0.0.1")
-    port = int(os.getenv("PROXY_PORT", "9200"))
+    port = int(os.getenv("PROXY_PORT", "8100"))
     domain = os.getenv("DOMAIN", "localhost")
     use_ssl = os.getenv("USE_SSL", "false").lower() == "true"
 

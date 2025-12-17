@@ -6,6 +6,7 @@ GuessBot - Turn-based number guessing referee bot
 import hashlib
 import os
 import random
+import re
 from typing import Dict, Any, List
 
 class GuessBot:
@@ -80,6 +81,15 @@ class GuessBot:
         self.guess_count = state.get('guess_count', 0)
         self.mode = state.get('mode', 'number')
         self.range = state.get('range', [1, 100])
+    
+    def _extract_number(self, text):
+        # Find all numbers in the string
+        if not text:
+            return None
+        numbers = re.findall(r'\d+', text)
+        if numbers:
+            return int(numbers[-1])  # Get the last number (or numbers[0] for first)
+        return None
 
     def on_init(self):
         """Initialize the game when bot is attached."""
@@ -128,8 +138,43 @@ class GuessBot:
         body = msg.get('body', {})
         sender = msg.get('sender')
 
-        if body.get('type') == 'move' and body.get('game') == 'guess':
+        # Check if message text contains "guess" or process all user messages
+        text = body.get('text', '')
+        if text:
             self._handle_guess_move(sender, body)
+
+    def on_private_message(self, slot_id: str, msg: Dict[str, Any]):
+        """Handle private messages from players (via dm_bot)."""
+        text = msg.get('text', '').strip()
+
+        if text == '!status':
+            # Respond with game status privately
+            current_turn = None
+            if self.players and not self.game_ended:
+                current_turn = self.players[self.turn_index % len(self.players)]
+
+            self.ctx.dm(slot_id, "private", {
+                "type": "status",
+                "game_started": self.game_started,
+                "game_ended": self.game_ended,
+                "player_count": len(self.players),
+                "guess_count": self.guess_count,
+                "current_turn": current_turn,
+                "range": self.range
+            })
+
+        elif text == '!help':
+            self.ctx.dm(slot_id, "private", {
+                "type": "help",
+                "commands": ["!status - Get game status", "!help - Show this help"],
+                "note": "Use public messages for guesses"
+            })
+
+        else:
+            self.ctx.dm(slot_id, "private", {
+                "type": "error",
+                "text": f"Unknown command: {text}. Try !help"
+            })
 
     def _start_game(self):
         """Start the game when enough players have joined."""
@@ -178,37 +223,20 @@ class GuessBot:
             })
             return
 
-        # Validate guess
-        action = body.get('action', 'guess')
-        if action == 'concede':
+        # Get guess value
+        guess_text = body.get('text', '')
+        if guess_text == "concede":
             self._handle_concede(sender)
             return
-
-        if action != 'guess':
-            self.ctx.post("control", {
-                "type": "violation",
-                "reason": "BAD_MOVE",
-                "details": f"Unknown action: {action}"
-            })
-            return
-
-        # Get guess value
-        guess = body.get('value')
+        if not isinstance(guess_text, int):
+            guess = self._extract_number(guess_text)
+        else:
+            guess = guess_text
         if guess is None:
             self.ctx.post("control", {
                 "type": "violation",
                 "reason": "BAD_MOVE",
                 "details": "Missing guess value"
-            })
-            return
-
-        try:
-            guess = int(guess)
-        except (ValueError, TypeError):
-            self.ctx.post("control", {
-                "type": "violation",
-                "reason": "BAD_MOVE",
-                "details": "Guess must be a number"
             })
             return
 
